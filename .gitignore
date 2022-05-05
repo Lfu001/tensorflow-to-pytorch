@@ -129,5 +129,5 @@ dmypy.json
 .pyre/
 
 automl/
-.effnetv2.py
-.tutorial.ipynb
+effnetv2.py
+tutorial.ipynb
