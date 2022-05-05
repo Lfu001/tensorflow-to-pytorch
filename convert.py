@@ -4,6 +4,7 @@ import subprocess
 import sys
 
 import tensorflow as tf
+import torch
 from torchinfo import summary
 from torchvision import models
 
@@ -11,7 +12,7 @@ sys.path.append("automl/efficientnetv2")
 import effnetv2_model
 import preprocessing
 
-MODEL_SIZE = "l"  # @param  {"s", "m", "l"}
+MODEL_SIZE = "s"  # @param  {"s", "m", "l"}
 MODEL = f"efficientnetv2-{MODEL_SIZE}"
 
 MODEL_PATH = "automl/efficientnetv2"
@@ -98,6 +99,14 @@ def outputClassesAndProbability(logits, labels_map):
         print(f"top {i+1} ({pred[0][id]*100:.1f}%):  {classes[id]} ")
 
 
+def makeTFLayerNameToWeightMapping(tf_model: tf.keras.Model):
+    layer_name_to_weight = dict()
+    for layer in tf_model.layers:
+        for var in layer.weights:
+            layer_name_to_weight[var.name[17:]] = var
+    return layer_name_to_weight
+
+
 def getTFModelStructure(tf_model: tf.keras.Model):
     structure = ""
     layers = [tf_model.layers[-3]] + tf_model.layers[:-3] + tf_model.layers[-2:]
@@ -165,12 +174,8 @@ def convertWeightsFromTFToTorch():
     ckpt_path = downloadCheckpoint()
     tf_model, cfg = buildModel(ckpt_path)
 
-    # # Get weights as NumPy array
-    def weightsGenerator(tf_model: effnetv2_model.EffNetV2Model):
-        layers = [tf_model.layers[-3]] + tf_model.layers[:-3] + tf_model.layers[-2:]
-        for layer in layers:
-            for var in layer.weights:
-                yield (var.name, var.numpy())
+    # Make mapping of layer name to weight
+    layer_name_to_weight = makeTFLayerNameToWeightMapping(tf_model)
 
     # Build PyTorch model
     torch_model: models.EfficientNet
@@ -185,9 +190,16 @@ def convertWeightsFromTFToTorch():
             f"Parameter MODEL_SIZE expect {{'s','m','l'}}, got {MODEL_SIZE}."
         )
 
+    # Create torch layer generator
+    torch_layers = (
+        item for item in torch_model.state_dict().items() if item[1].numpy().shape
+    )
+
     # Overwrite weights
-    for (torch_layer_name, torch_weights), (tf_layer_name, tf_weights) in zip(
-        torch_model.state_dict().items(), weightsGenerator(tf_model)
+    with open(f"tf_model-{MODEL_SIZE}_structure_fixed.txt") as f:
+        tf_model_structure = [s.split()[0] for s in f.readlines() if s != "\n"]
+    for (torch_layer_name, torch_weights), tf_layer_name in zip(
+        torch_layers, tf_model_structure
     ):
         # | TensorFlow | PyTorch |
         # ------------------------
@@ -196,42 +208,68 @@ def convertWeightsFromTFToTorch():
         # | gamma  | weight |  ->  batch_normalization
         # |  beta  |  bias  |  ->  batch_normalization
         # | moving_mean | running_mean |
-        # | moving_variance | running_variance |
-        assert (
-            (
-                "conv" in tf_layer_name
-                and "kernel" in tf_layer_name
-                and "weights" in torch_layer_name
-            )
-            or (
-                "conv" in tf_layer_name
-                and "bias" in tf_layer_name
-                and "bias" in torch_layer_name
-            )
-            or (
-                "normalization" in tf_layer_name
-                and "gamma" in tf_layer_name
-                and "weight" in torch_layer_name
-            )
-            or (
-                "normalization" in tf_layer_name
-                and "beta" in tf_layer_name
-                and "bias" in torch_layer_name
-            )
-            or (
-                "normalization" in tf_layer_name
-                and "moving_mean" in tf_layer_name
-                and "running_mean" in torch_layer_name
-            )
-            or (
-                "normalization" in tf_layer_name
-                and "moving_variance" in tf_layer_name
-                and "running_variance" in torch_layer_name
-            )
-        )
+        # | moving_variance | running_var |
+        if "conv" in tf_layer_name:
+            if "depthwise_kernel" in tf_layer_name:
+                assert "weight" in torch_layer_name
+                torch_weights[:] = torch.tensor(
+                    layer_name_to_weight[tf_layer_name].numpy().transpose(2, 3, 0, 1)
+                )
+            elif "kernel" in tf_layer_name:
+                assert "weight" in torch_layer_name
+                torch_weights[:] = torch.tensor(
+                    layer_name_to_weight[tf_layer_name].numpy().transpose(3, 2, 0, 1)
+                )
+            elif "bias" in tf_layer_name:
+                assert "bias" in torch_layer_name
+                torch_weights[:] = torch.tensor(
+                    layer_name_to_weight[tf_layer_name].numpy()
+                )
+            else:
+                raise ValueError("TensorFlow layer and PyTorch layer are not matching.")
+        elif "normalization" in tf_layer_name:
+            if "gamma" in tf_layer_name:
+                assert "weight" in torch_layer_name
+                torch_weights[:] = torch.tensor(
+                    layer_name_to_weight[tf_layer_name].numpy()
+                )
+            elif "beta" in tf_layer_name:
+                assert "bias" in torch_layer_name
+                torch_weights[:] = torch.tensor(
+                    layer_name_to_weight[tf_layer_name].numpy()
+                )
+            elif "moving_mean" in tf_layer_name:
+                assert "running_mean" in torch_layer_name
+                torch_weights[:] = torch.tensor(
+                    layer_name_to_weight[tf_layer_name].numpy()
+                )
+            elif "moving_variance" in tf_layer_name:
+                assert "running_var" in torch_layer_name
+                torch_weights[:] = torch.tensor(
+                    layer_name_to_weight[tf_layer_name].numpy()
+                )
+            else:
+                raise ValueError("TensorFlow layer and PyTorch layer are not matching.")
+        elif "dense" in tf_layer_name:
+            if "kernel" in tf_layer_name:
+                assert "weight" in torch_layer_name
+                torch_weights[:] = torch.tensor(
+                    layer_name_to_weight[tf_layer_name].numpy().transpose(1, 0)
+                )
+            elif "bias" in tf_layer_name:
+                assert "bias" in torch_layer_name
+                torch_weights[:] = torch.tensor(
+                    layer_name_to_weight[tf_layer_name].numpy()
+                )
+            else:
+                raise ValueError("TensorFlow layer and PyTorch layer are not matching.")
+        else:
+            raise ValueError("TensorFlow layer and PyTorch layer are not matching.")
+
+    torch.save(torch_model, os.path.join("torch_models", f"{MODEL}-21k-ft1k.pth"))
 
 
 if __name__ == "__main__":
     # tf_main()
-    torch_main()
-    # convertWeightsFromTFToTorch()
+    # torch_main()
+    convertWeightsFromTFToTorch()
