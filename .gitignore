@@ -131,3 +131,4 @@ dmypy.json
 automl/
 effnetv2.py
 tutorial.ipynb
+torch_models/
