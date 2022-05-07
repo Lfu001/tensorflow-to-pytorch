@@ -1,5 +1,6 @@
 import ast
 import os
+import re
 import subprocess
 import sys
 
@@ -12,7 +13,8 @@ sys.path.append("automl/efficientnetv2")
 import effnetv2_model
 import preprocessing
 
-MODEL_SIZE = "s"  # @param  {"s", "m", "l"}
+MODEL_SIZE = "l"  # @param  {"s", "m", "l"}
+MODEL_PRETRAIN = "21k-ft1k"  # @param {"21k", "21k-ft1k"}
 MODEL = f"efficientnetv2-{MODEL_SIZE}"
 
 MODEL_PATH = "automl/efficientnetv2"
@@ -37,7 +39,7 @@ def download(m):
 
 # Download checkpoint
 def downloadCheckpoint():
-    ckpt_path = download(MODEL + "-21k-ft1k")
+    ckpt_path = download(MODEL + "-" + MODEL_PRETRAIN)
     if tf.io.gfile.isdir(ckpt_path):
         ckpt_path = tf.train.latest_checkpoint(ckpt_path)
     return ckpt_path
@@ -201,6 +203,7 @@ def convertWeightsFromTFToTorch():
     for (torch_layer_name, torch_weights), tf_layer_name in zip(
         torch_layers, tf_model_structure
     ):
+        print(torch_layer_name)
         # | TensorFlow | PyTorch |
         # ------------------------
         # | kernel | weight |  ->  conv
@@ -233,6 +236,11 @@ def convertWeightsFromTFToTorch():
                 torch_weights[:] = torch.tensor(
                     layer_name_to_weight[tf_layer_name].numpy()
                 )
+                bn_layer = torch_model.get_submodule(
+                    re.match(".*[0-9]", torch_layer_name[: -len(".weight")]).group(0)
+                )
+                bn_layer.momentum = 0.01
+                bn_layer.eps = 1e-3
             elif "beta" in tf_layer_name:
                 assert "bias" in torch_layer_name
                 torch_weights[:] = torch.tensor(
@@ -266,7 +274,9 @@ def convertWeightsFromTFToTorch():
         else:
             raise ValueError("TensorFlow layer and PyTorch layer are not matching.")
 
-    torch.save(torch_model, os.path.join("torch_models", f"{MODEL}-21k-ft1k.pth"))
+    torch.save(
+        torch_model, os.path.join("torch_models", f"{MODEL}-{MODEL_PRETRAIN}.pth")
+    )
 
 
 if __name__ == "__main__":
