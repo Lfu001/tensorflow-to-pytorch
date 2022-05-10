@@ -132,3 +132,4 @@ automl/
 effnetv2.py
 tutorial.ipynb
 torch_models/
+*weights.txt
