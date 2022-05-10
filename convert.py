@@ -13,7 +13,7 @@ sys.path.append("automl/efficientnetv2")
 import effnetv2_model
 import preprocessing
 
-MODEL_SIZE = "l"  # @param  {"s", "m", "l"}
+MODEL_SIZE = "s"  # @param  {"s", "m", "l"}
 MODEL_PRETRAIN = "21k-ft1k"  # @param {"21k", "21k-ft1k"}
 MODEL = f"efficientnetv2-{MODEL_SIZE}"
 
@@ -38,8 +38,8 @@ def download(m):
 
 
 # Download checkpoint
-def downloadCheckpoint():
-    ckpt_path = download(MODEL + "-" + MODEL_PRETRAIN)
+def downloadCheckpoint(model_name):
+    ckpt_path = download(model_name)
     if tf.io.gfile.isdir(ckpt_path):
         ckpt_path = tf.train.latest_checkpoint(ckpt_path)
     return ckpt_path
@@ -72,9 +72,9 @@ def downloadImage(image_file):
 
 
 # Build model
-def buildModel(ckpt_path):
+def buildModel(model_name, ckpt_path):
     tf.keras.backend.clear_session()
-    tf_model = effnetv2_model.EffNetV2Model(model_name=MODEL)
+    tf_model = effnetv2_model.EffNetV2Model(model_name=model_name)
     _ = tf_model(tf.ones([1, 224, 224, 3]), training=False)
     tf_model.load_weights(ckpt_path)
     cfg = tf_model.cfg
@@ -129,7 +129,7 @@ def getTorchModelStructure(torch_model: models.EfficientNet):
 
 
 def tf_main():
-    ckpt_path = downloadCheckpoint()
+    ckpt_path = downloadCheckpoint(MODEL + "-" + MODEL_PRETRAIN)
 
     labels_map = "labels_map.txt"
     downloadLabelMapFile(labels_map)
@@ -137,7 +137,7 @@ def tf_main():
     image_file = "panda.jpg"
     downloadImage(image_file)
 
-    tf_model, cfg = buildModel(ckpt_path)
+    tf_model, cfg = buildModel(MODEL, ckpt_path)
 
     logits = runInference(image_file, cfg, tf_model)
 
@@ -173,8 +173,8 @@ def torch_main():
 
 def convertWeightsFromTFToTorch():
     # Build TensorFlow model
-    ckpt_path = downloadCheckpoint()
-    tf_model, cfg = buildModel(ckpt_path)
+    ckpt_path = downloadCheckpoint(MODEL + "-" + MODEL_PRETRAIN)
+    tf_model, cfg = buildModel(MODEL, ckpt_path)
 
     # Make mapping of layer name to weight
     layer_name_to_weight = makeTFLayerNameToWeightMapping(tf_model)
