@@ -2,5 +2,14 @@
     "python.analysis.extraPaths": [
         "/home/Lfu/.pyenv/versions/3.9.10/envs/pytorch-tutorials/lib/python3.9/site-packages",
         "./automl/efficientnetv2"
-    ]
+    ],
+    "python.testing.unittestArgs": [
+        "-v",
+        "-s",
+        "./tests",
+        "-p",
+        "test_*.py"
+    ],
+    "python.testing.pytestEnabled": false,
+    "python.testing.unittestEnabled": true
 }
