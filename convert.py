@@ -48,10 +48,18 @@ def downloadCheckpoint(model_name):
 # Download label map file
 def downloadLabelMapFile(labels_map):
     if labels_map not in os.listdir():
+        if labels_map == "labels_map.txt":
+            url = "https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/eval_data/labels_map.txt"
+        elif labels_map == "labels_map-21k.txt":
+            url = "https://storage.googleapis.com/bit_models/imagenet21k_wordnet_lemmas.txt"
+        else:
+            ValueError(
+                f"Labels map expects {{labels_map.txt, labels_map-21k.txt}}, got {labels_map}."
+            )
         subprocess.run(
             [
                 "wget",
-                "https://storage.googleapis.com/cloud-tpu-checkpoints/efficientnet/eval_data/labels_map.txt",
+                url,
                 "-O",
                 labels_map,
             ]
