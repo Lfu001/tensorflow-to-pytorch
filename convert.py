@@ -72,9 +72,11 @@ def downloadImage(image_file):
 
 
 # Build model
-def buildModel(model_name, ckpt_path):
+def buildModel(model_name, ckpt_path, model_pretrain):
     tf.keras.backend.clear_session()
-    tf_model = effnetv2_model.EffNetV2Model(model_name=model_name)
+    tf_model = effnetv2_model.EffNetV2Model(
+        model_name=model_name, model_pretrain=model_pretrain
+    )
     _ = tf_model(tf.ones([1, 224, 224, 3]), training=False)
     tf_model.load_weights(ckpt_path)
     cfg = tf_model.cfg
@@ -137,7 +139,7 @@ def tf_main():
     image_file = "panda.jpg"
     downloadImage(image_file)
 
-    tf_model, cfg = buildModel(MODEL, ckpt_path)
+    tf_model, cfg = buildModel(MODEL, ckpt_path, MODEL_PRETRAIN)
 
     logits = runInference(image_file, cfg, tf_model)
 
@@ -161,6 +163,13 @@ def torch_main():
         raise ValueError(
             f"Parameter MODEL_SIZE expect {{'s','m','l'}}, got {MODEL_SIZE}."
         )
+
+    if MODEL_PRETRAIN == "21k":
+        num_in_features = torch_model.classifier[1].in_features
+        torch_model.classifier[1] = torch.nn.Linear(
+            in_features=num_in_features, out_features=21843
+        )
+
     summary(
         torch_model,
         input_size=(1, 3, 224, 224),
@@ -174,7 +183,7 @@ def torch_main():
 def convertWeightsFromTFToTorch():
     # Build TensorFlow model
     ckpt_path = downloadCheckpoint(MODEL + "-" + MODEL_PRETRAIN)
-    tf_model, cfg = buildModel(MODEL, ckpt_path)
+    tf_model, cfg = buildModel(MODEL, ckpt_path, MODEL_PRETRAIN)
 
     # Make mapping of layer name to weight
     layer_name_to_weight = makeTFLayerNameToWeightMapping(tf_model)
@@ -190,6 +199,11 @@ def convertWeightsFromTFToTorch():
     else:
         raise ValueError(
             f"Parameter MODEL_SIZE expect {{'s','m','l'}}, got {MODEL_SIZE}."
+        )
+
+    if MODEL_PRETRAIN == "21k":
+        torch_model.classifier[1] = torch.nn.Linear(
+            torch_model.classifier[1].in_features, 21843
         )
 
     # Create torch layer generator
