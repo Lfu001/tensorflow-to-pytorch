@@ -49,30 +49,6 @@ class TestConvert(unittest.TestCase):
         self.pt_proba = tf.keras.layers.Softmax()(self.pt_logits.detach().numpy())
         self.proba_diff = np.abs(self.tf_proba - self.pt_proba)
 
-        # tf_weights = ""
-        # for layer in self.tf_model.layers:
-        #     for var in layer.weights:
-        #         tf_weights += var.name[17:] + "\n" + str(var.numpy()) + "\n\n"
-        # with open(f"tf_model-{self.MODEL_SIZE}_weights.txt", mode="w") as f:
-        #     f.write(tf_weights)
-        #     del tf_weights
-        # torch_weights = ""
-        # for name, tensor in self.torch_model.state_dict().items():
-        #     shape = tensor.to("cpu").numpy().shape
-        #     if shape:
-        #         if len(shape) == 4:
-        #             weight_string = str(tensor.detach().numpy().transpose(2, 3, 1, 0))
-        #         elif len(shape) == 1:
-        #             weight_string = str(tensor.detach().numpy())
-        #         elif len(shape) == 2:
-        #             weight_string = str(tensor.detach().numpy().transpose(1, 0))
-        #         else:
-        #             ValueError()
-        #         torch_weights += name + "\n" + weight_string + "\n\n"
-        # with open(f"torch_model-{self.MODEL_SIZE}_weights.txt", mode="w") as f:
-        #     f.write(torch_weights)
-        #     del torch_weights
-
     def tearDown(self) -> None:
         super().tearDown()
         if self.MODEL_PRETRAIN == "21k-ft1k":
