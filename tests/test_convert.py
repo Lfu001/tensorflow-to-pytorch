@@ -23,7 +23,7 @@ class TestConvert(unittest.TestCase):
         super().setUp()
 
         ckpt = downloadCheckpoint(self.MODEL + "-" + self.MODEL_PRETRAIN)
-        self.tf_model, cfg = buildModel(self.MODEL, ckpt)
+        self.tf_model, cfg = buildModel(self.MODEL, ckpt, self.MODEL_PRETRAIN)
         self.tf_img = tf.io.read_file("panda.jpg")
         self.tf_img = preprocessing.preprocess_image(
             self.tf_img, cfg.eval.isize, is_training=False, augname=cfg.data.augname
@@ -75,15 +75,26 @@ class TestConvert(unittest.TestCase):
 
     def tearDown(self) -> None:
         super().tearDown()
+        if self.MODEL_PRETRAIN == "21k-ft1k":
+            labels_map = "labels_map.txt"
+        elif self.MODEL_PRETRAIN == "21k":
+            labels_map = "labels_map-21k.txt"
+        else:
+            ValueError(
+                f"MODEL_PRETRAIN expects {{21k, 21k-ft1k}}, got {self.MODEL_PRETRAIN}."
+            )
+
         print("=" * 20 + "\nTensorFlow model\n" + "=" * 20)
-        outputClassesAndProbability(self.tf_logits.numpy(), "labels_map.txt")
+        outputClassesAndProbability(self.tf_logits.numpy(), labels_map)
 
         print("=" * 20 + "\nPyTorch model\n" + "=" * 20)
-        outputClassesAndProbability(self.pt_logits.detach().numpy(), "labels_map.txt")
+        outputClassesAndProbability(self.pt_logits.detach().numpy(), labels_map)
         print()
 
-        print("diff:", np.mean(self.diff), np.std(self.diff))
-        print("probability diff:", np.mean(self.proba_diff), np.std(self.proba_diff))
+        print(f"logits diff: mean = {np.mean(self.diff)}, std = {np.std(self.diff)}")
+        print(
+            f"probability diff: mean = {np.mean(self.proba_diff)}, std = {np.std(self.proba_diff)}"
+        )
 
     def testImageEqual(self):
         tf_img = tf.expand_dims(self.tf_img, 0).numpy()
@@ -108,19 +119,16 @@ class TestConvert(unittest.TestCase):
         print(tf_logit_shape, torch_logit_shape)
         self.assertEqual(tf_logit_shape, torch_logit_shape)
 
-    # def testLogitsDiff(self):
-    #     for i, (tf_logit, torch_logit) in enumerate(
-    #         zip(self.tf_logits.numpy()[0], self.pt_logits.detach().numpy()[0])
-    #     ):
-    #         self.assertAlmostEqual(tf_logit, torch_logit, msg=f"Index {i} failed.")
-
     def testProbaDiff(self):
-        for i, (tf_proba, torch_proba) in enumerate(zip(self.tf_proba, self.pt_proba)):
+        print(len(self.pt_proba[0]))
+        for i, (tf_proba, torch_proba) in enumerate(
+            zip(self.tf_proba[0], self.pt_proba[0])
+        ):
             self.assertAlmostEqual(
-                tf_proba.numpy()[0],
-                torch_proba.numpy()[0],
+                tf_proba.numpy(),
+                torch_proba.numpy(),
                 msg=f"Index {i} failed.",
-                places=4,
+                places=1,
             )
 
 
@@ -145,6 +153,30 @@ class TestModelL(TestConvert):
         super().__init__(methodName)
         self.MODEL_SIZE = "l"  # @param  {"s", "m", "l"}
         self.MODEL_PRETRAIN = "21k-ft1k"  # @param {"21k", "21k-ft1k"}
+        self.MODEL = f"efficientnetv2-{self.MODEL_SIZE}"
+
+
+class TestModelS21k(TestConvert):
+    def __init__(self, methodName: str = ...) -> None:
+        super().__init__(methodName)
+        self.MODEL_SIZE = "s"  # @param  {"s", "m", "l"}
+        self.MODEL_PRETRAIN = "21k"  # @param {"21k", "21k-ft1k"}
+        self.MODEL = f"efficientnetv2-{self.MODEL_SIZE}"
+
+
+class TestModelM21k(TestConvert):
+    def __init__(self, methodName: str = ...) -> None:
+        super().__init__(methodName)
+        self.MODEL_SIZE = "m"  # @param  {"s", "m", "l"}
+        self.MODEL_PRETRAIN = "21k"  # @param {"21k", "21k-ft1k"}
+        self.MODEL = f"efficientnetv2-{self.MODEL_SIZE}"
+
+
+class TestModelL21k(TestConvert):
+    def __init__(self, methodName: str = ...) -> None:
+        super().__init__(methodName)
+        self.MODEL_SIZE = "l"  # @param  {"s", "m", "l"}
+        self.MODEL_PRETRAIN = "21k"  # @param {"21k", "21k-ft1k"}
         self.MODEL = f"efficientnetv2-{self.MODEL_SIZE}"
 
 
